@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import Sidebar from '@/components/dashboard/sidebar';
 import { useMediaQuery } from '@/hooks/use-media-query';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import Cookies from 'js-cookie';
 import { fetchTeams,  } from '@/lib/api-client';
 import type { Team } from '@/lib/api-client';
@@ -21,6 +21,11 @@ export default function DashboardLayout({
   const [error, setError] = useState<string | null>(null);
   const isDesktop = useMediaQuery('(min-width: 768px)');
   const router = useRouter();
+  const pathname = usePathname();
+  
+  // Extract current teamId from the pathname
+  const pathSegments = pathname?.split('/') || [];
+  const pathTeamId = pathSegments.length > 2 ? pathSegments[pathSegments.length - 1] : undefined;
 
   // Check authentication
   useEffect(() => {
@@ -107,12 +112,12 @@ export default function DashboardLayout({
       {!isDesktop && (
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
-          className="fixed top-4 left-4 z-50 p-2 rounded-full bg-primary text-primary-foreground shadow-md"
+          className="fixed top-6 left-6 z-50 p-3 rounded-full bg-primary text-primary-foreground shadow-md hover:shadow-lg transition-all"
         >
           <svg 
             xmlns="http://www.w3.org/2000/svg" 
-            width="24" 
-            height="24" 
+            width="20" 
+            height="20" 
             viewBox="0 0 24 24" 
             fill="none" 
             stroke="currentColor" 
@@ -127,15 +132,22 @@ export default function DashboardLayout({
         </button>
       )}
       
-      {/* Sidebar */}
-      <Sidebar 
-        teams={teams}
-        currentTeam={currentTeam}
-        onSelectTeam={handleSelectTeam}
-        open={isDesktop || sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
-      />
-      {children}
+      {/* Main content wrapper */}
+      <div className="flex flex-grow w-full">
+        {/* Sidebar */}
+        <Sidebar 
+          teams={teams}
+          currentViewedTeamId={pathTeamId}
+          onSelectTeam={handleSelectTeam}
+          open={isDesktop || sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+        />
+        
+        {/* Main content area */}
+        <div className="flex-grow">
+          {children}
+        </div>
+      </div>
     </motion.div>
   );
 }

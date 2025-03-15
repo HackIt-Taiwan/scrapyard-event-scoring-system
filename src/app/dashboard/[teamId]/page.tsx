@@ -7,7 +7,7 @@ import ScoringPanel from '@/components/dashboard/scoring-panel';
 // import { useMediaQuery } from '@/hooks/use-media-query';
 import { useRouter } from 'next/navigation';
 import Cookies from 'js-cookie';
-import { fetchTeams, submitTeamScore } from '@/lib/api-client';
+import { fetchTeams, submitTeamScore, fetchTeamWithScore, fetchProjectData } from '@/lib/api-client';
 import type { Team, ScoreSubmission } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
 
@@ -23,12 +23,25 @@ export interface TeamDetails {
   }>;
   presentation_time?: string;
   current_votes?: number;
+  description?: string; // Add support for team description
+  project_narrative?: string; // Add support for project narrative
+}
+
+// Interface for user's existing rating data
+interface UserRating {
+  creativity: number;
+  completeness: number;
+  presentation: number;
+  comments: string;
 }
 
 export default function Dashboard() {
   const [currentTeam, setCurrentTeam] = useState<Team | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [userRating, setUserRating] = useState<UserRating | null>(null);
+  const [loadingRating, setLoadingRating] = useState(false);
+  const [teamDetails, setTeamDetails] = useState<TeamDetails | null>(null);
   const router = useRouter();
   // const params = useParams();
   // const teamId = params.teamId as string;
@@ -55,14 +68,22 @@ export default function Dashboard() {
           team_name: team.team_name,
           index: team.index,
           active: team.active,
-          canVote: team.canVote,
+          canVote: true, // Force canVote to always be true so teams are always editable
           scoredAt: undefined, // This will be updated when we get the rating data
         }));
         
         if (mappedTeams.length > 0 && !currentTeam) {
-          // Select first team that can be voted on, or just first team if none are votable
-          const firstVotableTeam = mappedTeams.find(team => team.canVote) || mappedTeams[0];
-          setCurrentTeam(firstVotableTeam);
+          // Just select the first team - don't filter by canVote
+          setCurrentTeam(mappedTeams[0]);
+        } else if (currentTeam) {
+          // Update the current team with the latest data, but keep canVote true
+          const updatedTeam = mappedTeams.find(team => team.team_id === currentTeam.team_id);
+          if (updatedTeam) {
+            setCurrentTeam({
+              ...updatedTeam,
+              canVote: true // Ensure it's always editable
+            });
+          }
         }
         
         setError(null);
@@ -82,6 +103,52 @@ export default function Dashboard() {
     return () => clearInterval(intervalId);
   }, [currentTeam]);
   
+  // Fetch the detailed team data with user's rating when currentTeam changes
+  useEffect(() => {
+    const fetchTeamDetails = async () => {
+      if (!currentTeam) return;
+      
+      try {
+        setLoadingRating(true);
+        
+        // Fetch team data and user rating
+        const teamData = await fetchTeamWithScore(currentTeam.team_id);
+        
+        // If user has a previous rating, set it
+        if (teamData.user_rating) {
+          setUserRating(teamData.user_rating);
+        } else {
+          // Reset the user rating if there's none for this team
+          setUserRating(null);
+        }
+        
+        // Set team details for the narrative component
+        if (teamData.team_data) {
+          setTeamDetails(teamData.team_data);
+        }
+        
+        // Fetch project data if available
+        const project = await fetchProjectData(currentTeam.team_id);
+        if (project && teamDetails) {
+          // Update team details with project data if available
+          setTeamDetails({
+            ...teamDetails,
+            description: project.description,
+            project_narrative: project.narrative
+          });
+        }
+        
+      } catch (err) {
+        console.error('Failed to fetch team details:', err);
+        // Don't set an error here as it might disrupt the UI
+      } finally {
+        setLoadingRating(false);
+      }
+    };
+    
+    fetchTeamDetails();
+  }, [currentTeam?.team_id]);
+  
   const handleScoreSubmit = async (scoreData: ScoreSubmission) => {
     try {
       await submitTeamScore(scoreData);
@@ -96,22 +163,23 @@ export default function Dashboard() {
         team_name: team.team_name,
         index: team.index,
         active: team.active,
-        canVote: team.canVote,
-        scoredAt: undefined, // This will be updated when we get the rating data
+        canVote: true, // Force canVote to always be true
+        scoredAt: new Date(), // Set the scoredAt date to now
       }));
       
       // Update current team with new data
       const updatedCurrentTeam = mappedTeams.find(t => t.team_id === currentTeam?.team_id);
       if (updatedCurrentTeam) {
-        // If the current team can no longer be voted on, find the next votable team
-        if (!updatedCurrentTeam.canVote) {
-          const nextVotableTeam = mappedTeams.find(team => team.canVote && team.team_id !== currentTeam?.team_id);
-          if (nextVotableTeam) {
-            setCurrentTeam(nextVotableTeam);
-          }
-        } else {
-          setCurrentTeam(updatedCurrentTeam);
-        }
+        // Set the current team with canVote always true
+        setCurrentTeam(updatedCurrentTeam);
+        
+        // Update the user rating state with the new values
+        setUserRating({
+          creativity: scoreData.scores.creativity,
+          completeness: scoreData.scores.completeness,
+          presentation: scoreData.scores.presentation,
+          comments: scoreData.feedback || ''
+        });
       }
       
       return true;
@@ -158,7 +226,15 @@ export default function Dashboard() {
             <p className="text-muted-foreground">加載中...</p>
           </div>
         ) : currentTeam ? (
-          <ScoringPanel team={currentTeam} onScoreSubmit={handleScoreSubmit} />
+          <div className="max-w-4xl mx-auto">
+            {/* Scoring Panel */}
+            <ScoringPanel 
+              team={currentTeam} 
+              onScoreSubmit={handleScoreSubmit} 
+              userRating={userRating}
+              isLoadingRating={loadingRating}
+            />
+          </div>
         ) : (
           <div className="flex items-center justify-center h-full">
             <p className="text-muted-foreground">請選擇一個隊伍進行評分</p>

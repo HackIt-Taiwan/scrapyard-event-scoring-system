@@ -13,6 +13,7 @@ export interface Team {
   active: boolean;
   scoredAt?: Date;
   canVote: boolean;
+  presentation_time?: string; // Optional presentation time
 }
 
 export interface TeamResponse {
@@ -124,8 +125,23 @@ export async function getTeam(): Promise<Team[]> {
  */
 export async function submitTeamScore(submission: ScoreSubmission): Promise<{ success: boolean }> {
   try {
+    // First, check if this is a new rating or an update by checking the current rating
+    const currentRating = await fetch(`/api/v1/rating/${submission.team_id}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include',
+    });
+
+    const ratingData = await currentRating.json();
+    const isUpdate = ratingData.user_rating !== null;
+    
+    // Use PUT for updates, POST for new ratings
+    const method = isUpdate ? 'PUT' : 'POST';
+    
     const response = await fetch(`/api/v1/rating/${submission.team_id}`, {
-      method: 'POST',
+      method,
       headers: {
         'Content-Type': 'application/json',
       },
@@ -174,7 +190,22 @@ export async function fetchAllScores(): Promise<ScoresResponse> {
 }
 
 // Fetch a single team with its score and user's rating
-export async function fetchTeamWithScore(teamId: string): Promise<{ team_id: string; team_name: string; ratings: { creativity: number; completeness: number; presentation: number }; user_rating: { creativity: number; completeness: number; presentation: number; comments: string } | null; team_data: TeamDetails }> {
+export async function fetchTeamWithScore(teamId: string): Promise<{ 
+  team_id: string; 
+  team_name: string; 
+  ratings: { 
+    creativity: number; 
+    completeness: number; 
+    presentation: number; 
+  }; 
+  user_rating: { 
+    creativity: number; 
+    completeness: number; 
+    presentation: number; 
+    comments: string; 
+  } | null; 
+  team_data: TeamDetails;
+}> {
   try {
     const response = await fetch(`/api/v1/rating/${teamId}`, {
       method: 'GET',
@@ -192,5 +223,44 @@ export async function fetchTeamWithScore(teamId: string): Promise<{ team_id: str
   } catch (error) {
     console.error('Error fetching team with score:', error);
     throw error;
+  }
+}
+
+/**
+ * Fetch project narrative data for a team
+ */
+export async function fetchProjectData(teamId: string): Promise<{
+  title: string;
+  description: string;
+  narrative: string;
+  keywords: string[];
+  technologies: string[];
+  github_url?: string;
+  demo_url?: string;
+  image_url?: string;
+} | null> {
+  try {
+    const response = await fetch(`/api/v1/projects/${teamId}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include',
+    });
+
+    if (response.status === 404) {
+      // No project data found
+      return null;
+    }
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+
+    const result = await response.json();
+    return result.data;
+  } catch (error) {
+    console.error('Error fetching project data:', error);
+    return null;
   }
 } 

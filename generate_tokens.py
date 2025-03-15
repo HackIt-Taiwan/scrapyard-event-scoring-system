@@ -57,7 +57,7 @@ def send_email_with_brevo(user, token, template):
     
     login_url = f"{BASE_URL}/login?auth={token}"
     
-    # Replace placeholders in template
+    # Replace placeholders in templatel
     if template:
         html_content = template.replace("{{ memberName }}", f"{user['name_zh']} ({user['name_en']})")
     else:
