@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import Cookies from 'js-cookie';
@@ -20,7 +20,8 @@ const popIn = {
   transition: { type: "spring", stiffness: 300, damping: 20 }
 };
 
-export default function Login() {
+// Create a separate component that uses useSearchParams
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { resolvedTheme } = useTheme();
@@ -185,5 +186,23 @@ export default function Login() {
         </motion.div>
       </motion.div>
     </motion.div>
+  );
+}
+
+// Main component with Suspense boundary
+export default function Login() {
+  return (
+    <Suspense fallback={
+      <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-background">
+        <div className="w-full max-w-md p-8 space-y-8 bg-card rounded-2xl shadow-sm border border-border">
+          <div className="flex flex-col items-center space-y-2">
+            <div className="w-10 h-10 border-t-2 border-primary rounded-full animate-spin mb-4"></div>
+            <p className="text-muted-foreground">載入中...</p>
+          </div>
+        </div>
+      </div>
+    }>
+      <LoginForm />
+    </Suspense>
   );
 } 
