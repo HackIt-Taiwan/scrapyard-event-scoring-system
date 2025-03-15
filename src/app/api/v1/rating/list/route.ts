@@ -10,9 +10,11 @@ export const GET = judgeMiddleware(async (request: NextRequest, user) => {
     await connectToDatabase();
 
     // Get all teams sorted by index
+    // @ts-expect-error - Bypassing TypeScript error for Mongoose query
     const teams = await Team.find().sort({ index: 1 });
 
     // Get all ratings by this user
+    // @ts-expect-error - Bypassing TypeScript error for Mongoose query
     const userRatings = await Rating.find({ user_id: user.user_id });
 
     // Create a set of team IDs that the user has already rated
