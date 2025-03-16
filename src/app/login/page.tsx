@@ -2,10 +2,8 @@
 
 import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import Image from 'next/image';
 import Cookies from 'js-cookie';
 import { motion } from 'framer-motion';
-import { useTheme } from 'next-themes';
 
 const fadeIn = {
   initial: { opacity: 0 },
@@ -14,17 +12,11 @@ const fadeIn = {
   transition: { duration: 0.5 }
 };
 
-const popIn = {
-  initial: { scale: 0.9, opacity: 0 },
-  animate: { scale: 1, opacity: 1 },
-  transition: { type: "spring", stiffness: 300, damping: 20 }
-};
 
 // Create a separate component that uses useSearchParams
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { resolvedTheme } = useTheme();
   const [message, setMessage] = useState<string>('');
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [expiredToken, setExpiredToken] = useState<boolean>(false);
@@ -90,17 +82,6 @@ function LoginForm() {
         className="w-full max-w-md p-8 space-y-8 bg-card rounded-2xl shadow-sm border border-border"
       >
         <div className="flex flex-col items-center space-y-2">
-          <motion.div {...popIn} transition={{ delay: 0.2, ...popIn.transition }}>
-            <Image
-              src={resolvedTheme === 'dark' ? '/logo-dark.svg' : '/logo.svg'} 
-              alt="HackScore Logo"
-              width={80}
-              height={80}
-              className="mb-6"
-              priority
-            />
-          </motion.div>
-          
           <motion.h1 
             initial={{ y: 10, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}

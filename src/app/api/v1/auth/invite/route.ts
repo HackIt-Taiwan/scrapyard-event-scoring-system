@@ -21,6 +21,7 @@ export async function POST(request: NextRequest) {
     await connectToDatabase();
 
     // Check if user already exists
+    // @ts-expect-error - TypeScript has issues with Mongoose model typing
     let user = await User.findOne({ email });
 
     // If user doesn't exist, create a new one

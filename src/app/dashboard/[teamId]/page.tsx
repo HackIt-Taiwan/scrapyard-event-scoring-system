@@ -5,11 +5,12 @@ import { motion } from 'framer-motion';
 // import Sidebar from '@/components/dashboard/sidebar';
 import ScoringPanel from '@/components/dashboard/scoring-panel';
 // import { useMediaQuery } from '@/hooks/use-media-query';
-import { useRouter } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Cookies from 'js-cookie';
 import { fetchTeams, submitTeamScore, fetchTeamWithScore, fetchProjectData } from '@/lib/api-client';
 import type { Team, ScoreSubmission } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
+import useSWR, { mutate } from 'swr';
 
 export interface TeamDetails {
   team_id: string;
@@ -37,14 +38,12 @@ interface UserRating {
 
 export default function Dashboard() {
   const [currentTeam, setCurrentTeam] = useState<Team | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [userRating, setUserRating] = useState<UserRating | null>(null);
-  const [loadingRating, setLoadingRating] = useState(false);
   const [teamDetails, setTeamDetails] = useState<TeamDetails | null>(null);
   const router = useRouter();
-  // const params = useParams();
-  // const teamId = params.teamId as string;
+  const params = useParams();
+  const teamId = params.teamId as string;
   
   // Check authentication
   useEffect(() => {
@@ -54,132 +53,108 @@ export default function Dashboard() {
     }
   }, [router]);
   
-  // Fetch teams data
+  // Fetch teams data with SWR
+  const { data: teamsData, error: teamsError } = useSWR('teams', fetchTeams, {
+    refreshInterval: 10000,
+    revalidateOnFocus: false,
+    revalidateOnReconnect: false
+  });
+
+  // Update current team when teams data changes or teamId changes
   useEffect(() => {
-    const getTeams = async () => {
-      try {
-        setIsLoading(true);
-        const teamsData = await fetchTeams();
-        
-        // Map the API response to our Team interface
-        const mappedTeams = teamsData.map(team => ({
-          id: team.team_id,
-          team_id: team.team_id,
-          team_name: team.team_name,
-          index: team.index,
-          active: team.active,
-          canVote: true, // Force canVote to always be true so teams are always editable
-          scoredAt: undefined, // This will be updated when we get the rating data
-        }));
-        
-        if (mappedTeams.length > 0 && !currentTeam) {
-          // Just select the first team - don't filter by canVote
-          setCurrentTeam(mappedTeams[0]);
-        } else if (currentTeam) {
-          // Update the current team with the latest data, but keep canVote true
-          const updatedTeam = mappedTeams.find(team => team.team_id === currentTeam.team_id);
-          if (updatedTeam) {
-            setCurrentTeam({
-              ...updatedTeam,
-              canVote: true // Ensure it's always editable
-            });
-          }
-        }
-        
-        setError(null);
-      } catch (err) {
-        console.error('Failed to fetch teams:', err);
-        setError('無法加載隊伍數據。請刷新頁面或稍後再試。');
-      } finally {
-        setIsLoading(false);
-      }
-    };
+    if (!teamsData) return;
     
-    // Initial fetch
-    getTeams();
+    // Map the API response to our Team interface
+    const mappedTeams = teamsData.map(team => ({
+      id: team.team_id,
+      team_id: team.team_id,
+      team_name: team.team_name,
+      index: team.index,
+      active: team.active,
+      canVote: true, // Force canVote to always be true
+      scoredAt: undefined,
+    }));
     
-    // Set up polling for updates
-    const intervalId = setInterval(getTeams, 5000);
-    return () => clearInterval(intervalId);
-  }, [currentTeam]);
+    // Find the team that matches the URL parameter
+    const matchedTeam = mappedTeams.find(team => team.team_id === teamId);
+    if (matchedTeam) {
+      setCurrentTeam(matchedTeam);
+    }
+  }, [teamsData, teamId]);
   
-  // Fetch the detailed team data with user's rating when currentTeam changes
+  // Fetch team details and user rating with SWR
+  const { data: teamWithScoreData, isValidating: loadingRating } = useSWR(
+    currentTeam ? `team-with-score-${currentTeam.team_id}` : null,
+    () => currentTeam ? fetchTeamWithScore(currentTeam.team_id) : null,
+    { revalidateOnFocus: false, revalidateOnReconnect: false }
+  );
+
+  // Fetch project data with SWR
+  const { data: projectData } = useSWR(
+    currentTeam ? `project-data-${currentTeam.team_id}` : null,
+    () => currentTeam ? fetchProjectData(currentTeam.team_id) : null,
+    { revalidateOnFocus: false, revalidateOnReconnect: false }
+  );
+
+  // Update user rating and team details when team score data changes
   useEffect(() => {
-    const fetchTeamDetails = async () => {
-      if (!currentTeam) return;
-      
-      try {
-        setLoadingRating(true);
-        
-        // Fetch team data and user rating
-        const teamData = await fetchTeamWithScore(currentTeam.team_id);
-        
-        // If user has a previous rating, set it
-        if (teamData.user_rating) {
-          setUserRating(teamData.user_rating);
-        } else {
-          // Reset the user rating if there's none for this team
-          setUserRating(null);
-        }
-        
-        // Set team details for the narrative component
-        if (teamData.team_data) {
-          setTeamDetails(teamData.team_data);
-        }
-        
-        // Fetch project data if available
-        const project = await fetchProjectData(currentTeam.team_id);
-        if (project && teamDetails) {
-          // Update team details with project data if available
-          setTeamDetails({
-            ...teamDetails,
-            description: project.description,
-            project_narrative: project.narrative
-          });
-        }
-        
-      } catch (err) {
-        console.error('Failed to fetch team details:', err);
-        // Don't set an error here as it might disrupt the UI
-      } finally {
-        setLoadingRating(false);
+    if (teamWithScoreData) {
+      // Set user rating if available
+      if (teamWithScoreData.user_rating) {
+        setUserRating(teamWithScoreData.user_rating);
+      } else {
+        setUserRating(null);
       }
-    };
-    
-    fetchTeamDetails();
-  }, [currentTeam?.team_id]);
+      
+      // Set team details
+      if (teamWithScoreData.team_data) {
+        const newTeamDetails: TeamDetails = {
+          ...teamWithScoreData.team_data,
+          // Ensure required properties are present
+          team_id: teamWithScoreData.team_data.team_id,
+          team_name: teamWithScoreData.team_data.team_name,
+          index: teamWithScoreData.team_data.index,
+          active: teamWithScoreData.team_data.active
+        };
+        
+        setTeamDetails(prevDetails => 
+          prevDetails ? { ...prevDetails, ...newTeamDetails } : newTeamDetails
+        );
+      }
+    }
+  }, [teamWithScoreData]);
+
+  // Update team details with project data when available
+  useEffect(() => {
+    if (projectData && teamDetails) {
+      setTeamDetails(prevDetails => {
+        if (!prevDetails) return null;
+        
+        return {
+          ...prevDetails,
+          description: projectData.description,
+          project_narrative: projectData.narrative
+        };
+      });
+    }
+  }, [projectData]);
   
   const handleScoreSubmit = async (scoreData: ScoreSubmission) => {
     try {
       await submitTeamScore(scoreData);
       
-      // Refetch teams after successful score submission
-      const teamsData = await fetchTeams();
+      // Update the user rating state with the new values
+      setUserRating({
+        creativity: scoreData.scores.creativity,
+        completeness: scoreData.scores.completeness,
+        presentation: scoreData.scores.presentation,
+        comments: scoreData.feedback || ''
+      });
       
-      // Map the API response to our Team interface
-      const mappedTeams = teamsData.map(team => ({
-        id: team.team_id,
-        team_id: team.team_id,
-        team_name: team.team_name,
-        index: team.index,
-        active: team.active,
-        canVote: true, // Force canVote to always be true
-        scoredAt: new Date(), // Set the scoredAt date to now
-      }));
-      
-      // Update current team with new data
-      const updatedCurrentTeam = mappedTeams.find(t => t.team_id === currentTeam?.team_id);
-      if (updatedCurrentTeam) {
-        // Set the current team with canVote always true
-        setCurrentTeam(updatedCurrentTeam);
-        
-        // Update the user rating state with the new values
-        setUserRating({
-          creativity: scoreData.scores.creativity,
-          completeness: scoreData.scores.completeness,
-          presentation: scoreData.scores.presentation,
-          comments: scoreData.feedback || ''
-        });
+      // Trigger revalidation of data
+      mutate('teams');
+      if (currentTeam) {
+        mutate(`team-with-score-${currentTeam.team_id}`);
       }
       
       return true;
@@ -188,6 +163,16 @@ export default function Dashboard() {
       return false;
     }
   };
+
+  // Set error from SWR
+  useEffect(() => {
+    if (teamsError) {
+      console.error('Teams error:', teamsError);
+      setError('無法加載隊伍數據。請刷新頁面或稍後再試。');
+    } else {
+      setError(null);
+    }
+  }, [teamsError]);
 
   if (error) {
     return (
@@ -205,6 +190,8 @@ export default function Dashboard() {
       </div>
     );
   }
+
+  const isLoading = !teamsData;
 
   return (
     <motion.div 

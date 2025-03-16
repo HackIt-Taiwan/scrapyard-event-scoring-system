@@ -256,7 +256,7 @@ export default function ScoringPanel({ team, onScoreSubmit, userRating, isLoadin
               value={feedback}
               onChange={(e) => setFeedback(e.target.value)}
               placeholder="請輸入您對此團隊的反饋意見..."
-              className="w-full p-3 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 min-h-[100px] resize-none"
+              className="w-full p-3 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 transition-all duration-300  focus:ring-black min-h-[100px] resize-none"
               disabled={submitting}
             />
           </motion.div>
