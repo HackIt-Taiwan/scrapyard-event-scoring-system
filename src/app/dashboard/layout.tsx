@@ -62,7 +62,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         setError(null);
         setTimeout(() => {
           getTeams()
-        }, 10_000);
+        }, 100_000);
       } catch (err) {
         console.error("Failed to fetch teams:", err);
         setError("無法加載隊伍數據。請刷新頁面或稍後再試。");
